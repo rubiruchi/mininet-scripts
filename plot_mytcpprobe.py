@@ -42,7 +42,7 @@ def parse_file(f):
                 continue
         else:
             #print "using sport %s (compare with %s)" % (args.port, fields[1].split(':')[1])
-            if fields[1].split(':')[1] != args.port:
+            if fields[1].split(':')[0] != args.port:
                 continue
         sport = int(fields[1].split(':')[1])
         times[sport].append(float(fields[0]))
@@ -55,10 +55,8 @@ def parse_file(f):
 added = defaultdict(int)
 events = []
 
-color_list = ['b', 'g', 'r']
 def plot_cwnds(ax):
     global events
-    i = 0
     for f in args.files:
         times, cwnds = parse_file(f)
         for port in sorted(cwnds.keys()):
@@ -66,10 +64,9 @@ def plot_cwnds(ax):
             cwnd = cwnds[port]
 
             events += zip(t, [port]*len(t), cwnd)
-            ax.plot(t, cwnd, color=color_list[i])
-            i += 1
-    events.sort()
+            ax.plot(t, cwnd)
 
+    events.sort()
 total_cwnd = 0
 cwnd_time = []
 
@@ -94,7 +91,7 @@ for (t,p,c) in events:
     added[p] = c
     totalcwnds.append(total_cwnd)
 
-axPlot.plot(first(cwnd_time), second(cwnd_time), lw=2, label="$\sum_i W_i$", color='k')
+axPlot.plot(first(cwnd_time), second(cwnd_time), lw=2, label="$\sum_i W_i$")
 axPlot.grid(True)
 #axPlot.legend()
 axPlot.set_xlabel("seconds")

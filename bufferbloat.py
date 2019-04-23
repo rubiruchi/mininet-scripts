@@ -1,6 +1,13 @@
 #!/usr/bin/python
 
 "CS144 In-class exercise: Buffer Bloat"
+"""
+This script will initialize a mininet star topo and start.
+Then it will have h2 be a tcp server listening to port 5001,
+and h1 be a simple http server.
+h2 will write its server output to iperf-recv.txt.
+
+"""
 
 from mininet.topo import Topo
 from mininet.node import CPULimitedHost
@@ -78,31 +85,64 @@ parser.add_argument('--diff',
                     dest="diff",
                     default=False)
 
+parser.add_argument('--myexpr',
+                    help="my experiment",
+                    type=str,
+                    dest="myexpr",
+                    default="")
+
 # Expt parameters
 args = parser.parse_args()
 
 
 class StarTopo(Topo):
-    "Star topology for Buffer Bloat experiment"
-
-    def __init__(self, n=2, cpu=None, bw_host=1000, bw_net=1.5,
-                 delay=10, maxq=None, diff=False):
-        # Add default members to class.
-        super(StarTopo, self ).__init__()
-
+    """Star topology for Buffer Bloat experiment"""
+    def build(self, n=2, cpu=None, bw_host=1000, bw_net=1.5,
+              delay=10, maxq=None, diff=False):
         # Create switch and host nodes
         for i in xrange(n):
-            self.addHost( 'h%d' % (i+1), cpu=cpu )
-            
+            self.addHost('h%d' % (i+1), cpu=.5/n )
 
         self.addSwitch('s0', fail_mode='open')
 
-        
-        self.addLink('h1', 's0', bw=bw_host,
-                      max_queue_size=int(maxq) )
+        # self.addLink('h1', 's0', bw=bw_host, delay=delay, max_queue_size=int(maxq) )
 
-        for i in xrange(1, n):
-            self.addLink('h%d' % (i+1), 's0', bw=bw_host)
+        for i in xrange(n):
+            self.addLink('h%d' % (i + 1), 's0', delay=delay, bw=bw_host)
+
+
+class MyTopo(Topo):
+    def build(self, delay=10, bw_host=1000, maxq=None):
+        for i in xrange(3):
+            self.addHost('h%d' % (i + 1), cpu=.5/3)
+
+        self.addSwitch('s0', fail_mode='open')
+        self.addSwitch('s1', fail_mode='open')
+
+        for i in xrange(2):
+            self.addLink('h%d' % (i + 1), 's0', delay=delay, bw=bw_host)
+
+        self.addLink('h3', 's1', delay = delay, bw=bw_host)
+        self.addLink('s0', 's1', delay = delay, bw=bw_host, max_queue_size=int(maxq))
+
+
+# class SingleSwitchTopo( Topo ):
+#     "Single switch connected to n hosts."
+#     def build( self, n=2, lossy=True ):
+#         switch = self.addSwitch('s0')
+#         for h in range(n):
+#             # Each host gets 50%/n of system CPU
+#             host = self.addHost('h%s' % (h + 1),
+#                                 cpu=.5 / n)
+#             if lossy:
+#                 # 10 Mbps, 5ms delay, 10% packet loss
+#                 self.addLink(host, switch,
+#                              bw=10, delay='5ms', loss=10, use_htb=True)
+#             else:
+#                 # 10 Mbps, 5ms delay, no packet loss
+#                 self.addLink(host, switch,
+#                              bw=10, delay='5ms', loss=0, use_htb=True)
+
 
 def ping_latency(net):
     "(Incomplete) verify link latency"
@@ -112,6 +152,7 @@ def ping_latency(net):
     print "Ping result:"
     print result.strip()
 
+
 def bbnet():
     "Create network and run Buffer Bloat experiment"
     print "starting mininet ...."
@@ -119,11 +160,22 @@ def bbnet():
     seconds = 3600
     start = time()
     # Reset to known state
-    topo = StarTopo(n=args.n, bw_host=args.bw_host,
-                    delay='%sms' % args.delay,
-                    bw_net=args.bw_net, maxq=args.maxq, diff=args.diff)
-    net = Mininet(topo=topo, host=CPULimitedHost, link=TCLink,
-                  autoPinCpus=True)
+
+    delay = args.delay
+    # if delay - 10 > 0:
+    #     delay -= 10
+    if args.myexpr:
+        topo = MyTopo(maxq=args.maxq)
+    else:
+        topo = StarTopo(n=args.n, bw_host=args.bw_host,
+                        delay='%sms' % delay,
+                        bw_net=args.bw_net, maxq=args.maxq, diff=args.diff)
+    # topo = SingleSwitchTopo(n=2, lossy=False)
+    net = Mininet(topo=topo,
+                  host=CPULimitedHost,
+                  link=TCLink,
+                  autoStaticArp=True)
+                  # autoPinCpus=True)
     net.start()
     dumpNodeConnections(net.hosts)
     net.pingAll()
@@ -131,21 +183,28 @@ def bbnet():
     if args.diff:
         print "Differentiate Traffic Between iperf and wget"
         os.system("bash tc_cmd_diff.sh")
-    else:
-        print "exec tc_cmd.sh"
-        os.system("bash tc_cmd.sh %s" % args.maxq)
+    # else:
+    #     print "exec tc_cmd.sh"
+    #     os.system("bash tc_cmd.sh %s" % args.maxq)
     sleep(2)
     ping_latency(net)
-    print "Initially, the delay between two hosts is around %dms" % (int(args.delay)*2) 
+    print "Initially, the delay between two hosts is around %dms" % (int(args.delay)*4)
     h2 = net.getNodeByName('h2')
     h1 = net.getNodeByName('h1')
+    h3 = net.getNodeByName('h3')
     h1.cmd('cd ./http/; nohup python2.7 ./webserver.py &')
     h1.cmd('cd ../')
-    h2.cmd('iperf -s -w 16m -p 5001 -i 1 > iperf-recv.txt &')
-    CLI( net )    
+    h2.cmd('iperf -s -w 10m -p 5001 -i 1 > iperf-recv.txt &')
+    sleep(1)
+    print "myexpr is %s" % args.myexpr
+    if args.myexpr:
+        h1.cmd('bash iperf.sh bbr')
+        # h3.cmd('bash iperf.sh reno')
+    CLI( net )
     h1.cmd("sudo pkill -9 -f webserver.py")
     h2.cmd("rm -f index.html*")
     Popen("killall -9 cat", shell=True).wait()
+
 
 if __name__ == '__main__':
     bbnet()
