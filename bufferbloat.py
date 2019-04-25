@@ -85,10 +85,16 @@ parser.add_argument('--diff',
                     dest="diff",
                     default=False)
 
-parser.add_argument('--myexpr',
-                    help="my experiment",
+parser.add_argument('--cc1',
+                    help="congestion control used by h1",
                     type=str,
-                    dest="myexpr",
+                    dest="cc1",
+                    default="")
+
+parser.add_argument('--cc2',
+                    help="congestion control used by h2",
+                    type=str,
+                    dest="cc2",
                     default="")
 
 # Expt parameters
@@ -164,7 +170,7 @@ def bbnet():
     delay = args.delay
     # if delay - 10 > 0:
     #     delay -= 10
-    if args.myexpr:
+    if args.cc1:
         topo = MyTopo(maxq=args.maxq)
     else:
         topo = StarTopo(n=args.n, bw_host=args.bw_host,
@@ -189,20 +195,22 @@ def bbnet():
     sleep(2)
     ping_latency(net)
     print "Initially, the delay between two hosts is around %dms" % (int(args.delay)*4)
-    h2 = net.getNodeByName('h2')
     h1 = net.getNodeByName('h1')
+    h2 = net.getNodeByName('h2')
     h3 = net.getNodeByName('h3')
     h1.cmd('cd ./http/; nohup python2.7 ./webserver.py &')
     h1.cmd('cd ../')
-    h2.cmd('iperf -s -w 10m -p 5001 -i 1 > iperf-recv.txt &')
+    h3.cmd('iperf -s -p 5001 -i 1 > iperf-recv.txt &')
     sleep(1)
-    print "myexpr is %s" % args.myexpr
-    if args.myexpr:
-        h1.cmd('bash iperf.sh bbr')
-        # h3.cmd('bash iperf.sh reno')
+    if args.cc1:
+        print "Open a %s flow from h1 to h3" % args.cc1
+        h1.cmd('bash iperf.sh %s' % args.cc1)
+    if args.cc2:
+        print "Open a %s flow from h2 to h3" % args.cc2
+        h2.cmd('bash iperf.sh %s' % args.cc2)
     CLI( net )
     h1.cmd("sudo pkill -9 -f webserver.py")
-    h2.cmd("rm -f index.html*")
+    h3.cmd("rm -f index.html*")
     Popen("killall -9 cat", shell=True).wait()
 
 

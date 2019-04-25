@@ -25,7 +25,7 @@ def start_tcpprobe():
           args.exp, shell=True)
 
 def qmon():
-    monitor = Process(target=monitor_qlen,args=('s0-eth2', 0.01, '%s_sw0-qlen.txt' % args.exp ))
+    monitor = Process(target=monitor_qlen,args=('s0-eth1', 0.01, '%s_sw0-qlen.txt' % args.exp ))
     monitor.start()
     print "Monitoring Queue Occupancy ... will save it to %s_sw0-qlen.txt " % args.exp
     raw_input('Press Enter key to stop the monitor--> ')
